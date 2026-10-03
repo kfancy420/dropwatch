@@ -1,0 +1,107 @@
+{
+  "name": "dropwatch",
+  "productName": "Dropwatch",
+  "version": "1.0.0",
+  "description": "Restock alerts for trading-card drops. Watches product pages politely, alerts a person, never buys.",
+  "author": "kfancy",
+  "homepage": "https://github.com/kfancy420/dropwatch",
+  "type": "module",
+  "main": "out/main/index.js",
+  "bin": {
+    "dropwatch": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "app:dev": "pnpm icons && electron-vite dev",
+    "app:build": "pnpm icons && electron-vite build",
+    "app:start": "electron-vite preview",
+    "app:dist": "pnpm app:build && electron-builder --win --publish never",
+    "icons": "electron scripts/make-icons.cjs",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "build": {
+    "appId": "com.kfancy.dropwatch",
+    "productName": "Dropwatch",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "electronLanguages": [
+      "en-US"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/@fontsource-variable/bricolage-grotesque/LICENSE",
+        "to": "licenses/bricolage-grotesque.txt"
+      },
+      {
+        "from": "node_modules/@fontsource-variable/instrument-sans/LICENSE",
+        "to": "licenses/instrument-sans.txt"
+      },
+      {
+        "from": "node_modules/lucide-react/LICENSE",
+        "to": "licenses/lucide.txt"
+      },
+      {
+        "from": "node_modules/react/LICENSE",
+        "to": "licenses/react.txt"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Dropwatch-Setup-${version}.exe",
+      "shortcutName": "Dropwatch",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": null
+  },
+  "devDependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/instrument-sans": "^5.3.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "lucide-react": "^1.49.0",
+    "playwright-core": "^1.63.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsup": "^8.2.4",
+    "typescript": "^5.5.0",
+    "vite": "^7.3.6",
+    "vitest": "^2.0.0"
+  }
+}
