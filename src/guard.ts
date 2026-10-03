@@ -3,18 +3,24 @@
 // No address may lead to this computer or the home network, whether a person
 // typed it in or a shop redirected to it. The check sits where the connection
 // is opened, so nothing reaches the network without passing it. An address
-// written as numbers is checked as written. A name is checked when it is
-// looked up, so a name that points somewhere private is refused whenever it
-// starts doing so.
+// written as numbers is refused outright: shops go by name. A name is checked
+// when it is looked up, so a name that points somewhere private is refused
+// whenever it starts doing so.
+//
+// One thing cannot be seen from here: the address the home router shows the
+// internet, when this computer sits behind it and a name points at it.
 
 import { lookup as dnsLookup } from "node:dns";
 import { BlockList, isIP, type LookupFunction } from "node:net";
+import { networkInterfaces } from "node:os";
 
 import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 
 import { bareHost } from "./retailers.js";
 import type { FetchLike } from "./types.js";
 
+// 198.18.0.0/15 is left off on purpose. No home network uses it, and some VPN
+// and proxy tools answer every name with an address from it.
 const PRIVATE = new BlockList();
 for (const [network, bits] of [
   ["0.0.0.0", 8],
@@ -25,18 +31,17 @@ for (const [network, bits] of [
   ["172.16.0.0", 12],
   ["192.0.0.0", 24],
   ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
   // Multicast, reserved and broadcast.
   ["224.0.0.0", 3],
 ] as const) {
   PRIVATE.addSubnet(network, bits, "ipv4");
   // The same range as seen through an IPv6-only network's NAT64 gateway.
   PRIVATE.addSubnet(`64:ff9b::${network}`, 96 + bits, "ipv6");
+  PRIVATE.addSubnet(`64:ff9b:1::${network}`, 96 + bits, "ipv6");
 }
 for (const [network, bits] of [
   // Unspecified, loopback and the retired "IPv4-compatible" range.
   ["::", 96],
-  ["64:ff9b:1::", 48],
   ["100::", 64],
   // Teredo and 6to4 tunnels, which can carry a private IPv4 address inside.
   ["2001::", 32],
@@ -68,6 +73,31 @@ export function isLocalHost(hostname: string): boolean {
   return host === "localhost" || /\.(localhost|local|internal|lan|home)$/.test(host);
 }
 
+/** True for a host written as numbers (93.184.216.34) instead of a name. A port may follow it. */
+export function isNumberAddress(host: string): boolean {
+  try {
+    return isIP(unbracketed(new URL(`http://${host}`).hostname)) !== 0;
+  } catch {
+    return false;
+  }
+}
+
+type Interfaces = typeof networkInterfaces;
+
+/** This computer's own addresses and, for IPv6, the home network around each one. */
+function ownNetworks(interfaces: Interfaces): BlockList {
+  const own = new BlockList();
+  for (const addresses of Object.values(interfaces())) {
+    for (const { address, family, internal } of addresses ?? []) {
+      if (internal) continue;
+      if (family === "IPv4") own.addAddress(address, "ipv4");
+      // A home network is one /64, and the router usually sits at its first address.
+      else own.addSubnet(address.replace(/%.*$/, ""), 64, "ipv6");
+    }
+  }
+  return own;
+}
+
 function isLoopback(hostname: string): boolean {
   const host = unbracketed(hostname);
   return host === "localhost" || host === "::1" || /^127\.\d+\.\d+\.\d+$/.test(host);
@@ -77,13 +107,18 @@ export class PrivateAddressError extends Error {
   readonly code = "EPRIVATE";
 }
 
-/** A DNS lookup that fails when any address behind the name is private. */
-export function publicOnly(resolve: LookupFunction = dnsLookup as LookupFunction): LookupFunction {
+/** A DNS lookup that fails when any address behind the name is private or this computer's own. */
+export function publicOnly(
+  resolve: LookupFunction = dnsLookup as LookupFunction,
+  interfaces: Interfaces = networkInterfaces,
+): LookupFunction {
   return (hostname, options, callback) => {
     resolve(hostname, options, (err, address, family) => {
       if (!err) {
         const found = typeof address === "string" ? [address] : address.map((a) => a.address);
-        if (found.some(isPrivateAddress)) {
+        const own = ownNetworks(interfaces);
+        const isOwn = (a: string) => isIP(a) !== 0 && own.check(a, isIP(a) === 6 ? "ipv6" : "ipv4");
+        if (found.some((a) => isPrivateAddress(a) || isOwn(a))) {
           err = new PrivateAddressError(`${hostname} leads to a private address`);
         }
       }
@@ -107,8 +142,9 @@ export function guardedFetch(options: GuardOptions = {}): FetchLike {
     // Every connection is opened here, whatever led to it.
     connect: (target, callback) => {
       if (options.allowLoopback && isLoopback(target.hostname)) return unchecked(target, callback);
-      if (isLocalHost(target.hostname)) {
-        return callback(new PrivateAddressError(`${target.hostname} is a private address`), null);
+      // A shop goes by name. Numbers could be anything, this home's own address included.
+      if (isIP(unbracketed(target.hostname)) || isLocalHost(target.hostname)) {
+        return callback(new PrivateAddressError(`${target.hostname} is not a public web name`), null);
       }
       checked(target, callback);
     },

@@ -54,6 +54,18 @@ const store = `http://127.0.0.1:${server.address().port}`;
 
 // ---- Helpers ----
 const results = [];
+/** The app's helper processes let go of the folder a moment after it ends, and rmSync does not wait for them. */
+async function removeFolder(dir) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      if (attempt === 120) throw err;
+      await new Promise((done) => setTimeout(done, 250));
+    }
+  }
+}
+
 async function step(name, run) {
   try {
     await run();
@@ -317,7 +329,7 @@ try {
   await app.evaluate(({ app: electronApp }) => electronApp.exit(0)).catch(() => {});
   await app.close().catch(() => {});
   server.close();
-  rmSync(dataDir, { recursive: true, force: true });
+  await removeFolder(dataDir);
 }
 
 const failed = results.filter(([status]) => status === "FAIL").length;

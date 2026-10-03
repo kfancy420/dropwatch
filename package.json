@@ -1,9 +1,11 @@
 {
   "name": "dropwatch",
   "productName": "Dropwatch",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Restock alerts for trading-card drops. Watches product pages politely, alerts a person, never buys.",
   "author": "kfancy",
+  "license": "UNLICENSED",
+  "private": true,
   "homepage": "https://github.com/kfancy420/dropwatch",
   "type": "module",
   "main": "out/main/index.js",
@@ -26,7 +28,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:recovery": "node scripts/e2e-recovery.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "engines": {
     "node": ">=20.18.1"
@@ -46,6 +50,10 @@
       "en-US"
     ],
     "extraResources": [
+      {
+        "from": "LICENSE",
+        "to": "licenses/Dropwatch.txt"
+      },
       {
         "from": "node_modules/@fontsource-variable/bricolage-grotesque/LICENSE",
         "to": "licenses/bricolage-grotesque.txt"
@@ -81,7 +89,7 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "artifactName": "Dropwatch-Setup-${version}.exe",
+      "artifactName": "Dropwatch-Setup.exe",
       "shortcutName": "Dropwatch",
       "deleteAppDataOnUninstall": false
     },

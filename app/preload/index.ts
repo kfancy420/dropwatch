@@ -12,7 +12,16 @@ const bridge: Bridge = {
     return () => ipcRenderer.removeListener("dropwatch:state", handler);
   },
   onSound: (listener) => {
-    const handler = () => listener();
+    const handler = () => {
+      // The app waits for this answer, and makes a sound itself if none comes.
+      let played = true;
+      try {
+        listener();
+      } catch {
+        played = false;
+      }
+      ipcRenderer.send("dropwatch:sound-played", played);
+    };
     ipcRenderer.on("dropwatch:sound", handler);
     return () => ipcRenderer.removeListener("dropwatch:sound", handler);
   },

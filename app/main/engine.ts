@@ -3,7 +3,7 @@
 // it runs under the unit tests as it is.
 
 import { randomInt } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
 import { alertText, sendAlerts, type PostLike } from "../../src/alerts.js";
@@ -15,7 +15,9 @@ import {
   newItemId,
   pause,
   saveConfig,
+  writeWhole,
 } from "../../src/config.js";
+import { isNumberAddress } from "../../src/guard.js";
 import { hostOf, SOURCE_ERROR_KINDS, SourceError, type SourceErrorKind } from "../../src/http.js";
 import {
   Monitor,
@@ -121,7 +123,9 @@ export function explainError(kind: SourceErrorKind, host: string, source?: Sourc
     case "restricted":
       return "This link leads to a store that doesn't allow automated checks, so Dropwatch won't watch it. Set a reminder for the drop instead.";
     case "private":
-      return `${host} leads to an address inside your own network, so Dropwatch won't open it. On public Wi-Fi, sign in to the network first.`;
+      return isNumberAddress(host)
+        ? `Dropwatch only opens shops by their web name, and ${host} is a bare number address. Paste the link from the shop's own page.`
+        : `${host} leads to an address inside your own network, so Dropwatch won't open it. On public Wi-Fi, sign in to the network first.`;
     case "config":
       return source === "bestbuy"
         ? "Best Buy needs a key before Dropwatch can check it. Add one in Settings."
@@ -262,14 +266,14 @@ export class Engine {
 
   /** Writes anything still held in memory. Call before the app exits. */
   flush(): void {
+    // A write that fails stays marked, so the next flush tries it again.
     const watchState = JSON.stringify(this.monitor.troubled());
-    if (watchState !== this.writtenWatchState) {
+    if (watchState !== this.writtenWatchState && this.writeQuietly(this.watchStateFile, watchState)) {
       this.writtenWatchState = watchState;
-      this.writeQuietly(this.watchStateFile, watchState);
     }
-    if (!this.activityDirty) return;
-    this.activityDirty = false;
-    this.writeQuietly(this.activityFile, JSON.stringify(this.activity));
+    if (this.activityDirty && this.writeQuietly(this.activityFile, JSON.stringify(this.activity))) {
+      this.activityDirty = false;
+    }
   }
 
   /** The last chance to write a list that would not save earlier. Call before the app exits. */
@@ -279,13 +283,12 @@ export class Engine {
   }
 
   /** For files that are a convenience: losing one must not take the app down. */
-  private writeQuietly(file: string, text: string): void {
+  private writeQuietly(file: string, text: string): boolean {
     try {
-      const tmp = `${file}.tmp`;
-      writeFileSync(tmp, text, "utf8");
-      renameSync(tmp, file);
+      writeWhole(file, text);
+      return true;
     } catch {
-      // Nothing to do; the next write may work.
+      return false;
     }
   }
 

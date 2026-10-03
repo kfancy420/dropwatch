@@ -25,6 +25,10 @@ const APP_ID = "com.kfancy.dropwatch";
 const RELEASES_API = "https://api.github.com/repos/kfancy420/dropwatch/releases/latest";
 const RELEASES_PAGE = "https://github.com/kfancy420/dropwatch/releases/latest";
 const UPDATE_CHECK_MS = 24 * 60 * 60 * 1000;
+/** How long the window's page has to answer that it played the alarm. */
+const ALARM_ANSWER_MS = 3000;
+/** A page that has stayed up this long is treated as healthy again. */
+const CRASH_MEMORY_MS = 5 * 60 * 1000;
 
 // Tests point the app at a throwaway folder and place the window themselves.
 if (process.env.DROPWATCH_DATA_DIR) app.setPath("userData", process.env.DROPWATCH_DATA_DIR);
@@ -39,7 +43,12 @@ let engine: Engine | undefined;
 let quitting = false;
 let update: AppState["update"];
 let pushTimer: NodeJS.Timeout | undefined;
-let lastReloadAt = 0;
+/** True while the window's page is loaded and can play the alarm. */
+let pageReady = false;
+let pageCrashes = 0;
+let lastCrashAt = 0;
+let reloadTimer: NodeJS.Timeout | undefined;
+let alarmTimer: NodeJS.Timeout | undefined;
 const liveNotifications = new Set<Notification>();
 
 function isWebUrl(url: string): boolean {
@@ -56,8 +65,16 @@ function openExternal(url: string): void {
   if (isWebUrl(url)) void shell.openExternal(new URL(url).href);
 }
 
+function reloadPage(): void {
+  clearTimeout(reloadTimer);
+  reloadTimer = undefined;
+  if (win && !win.isDestroyed()) win.webContents.reload();
+}
+
 function showWindow(): void {
   if (!win) return;
+  // Asking for the window is reason enough to bring a dead page back now.
+  if (win.webContents.isCrashed()) reloadPage();
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -84,8 +101,18 @@ function notify(notice: Notice): void {
 }
 
 function playSound(): void {
-  if (win && !win.isDestroyed()) win.webContents.send("dropwatch:sound");
-  else shell.beep();
+  // The alarm is made in the window's page. While that is loading or has died, Windows makes the sound.
+  if (!win || win.isDestroyed() || !pageReady) return shell.beep();
+  win.webContents.send("dropwatch:sound");
+  // A page that has hung looks ready and plays nothing, so the page has to answer.
+  alarmTimer ??= setTimeout(alarmUnanswered, ALARM_ANSWER_MS);
+}
+
+function alarmUnanswered(): void {
+  alarmTimer = undefined;
+  shell.beep();
+  // End the hung page. A fresh one takes its place, the same way as after a crash.
+  if (pageReady && win && !win.isDestroyed()) win.webContents.forcefullyCrashRenderer();
 }
 
 function launchAtLogin(): boolean {
@@ -199,11 +226,20 @@ function createWindow(): void {
   });
   // Signing out of Windows ends the app without a "before-quit".
   win.on("session-end", () => engine?.close());
-  // The alarm plays in the window. If the window's page dies, bring it back, but not in a loop.
+  win.webContents.on("did-finish-load", () => {
+    pageReady = true;
+  });
+  // If the window's page dies, bring it back: at once the first time, then
+  // more and more slowly for a page that keeps dying.
   win.webContents.on("render-process-gone", () => {
-    if (quitting || Date.now() - lastReloadAt < 60_000) return;
-    lastReloadAt = Date.now();
-    win?.webContents.reload();
+    pageReady = false;
+    if (quitting) return;
+    if (Date.now() - lastCrashAt > CRASH_MEMORY_MS) pageCrashes = 0;
+    lastCrashAt = Date.now();
+    const wait = pageCrashes === 0 ? 0 : Math.min(60_000, 5000 * 2 ** (pageCrashes - 1));
+    pageCrashes++;
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(reloadPage, wait);
   });
 
   if (rendererUrl) void win.loadURL(rendererUrl);
@@ -298,7 +334,7 @@ function handlers(core: Engine): Handlers {
   };
 }
 
-function fromOurWindow(event: Electron.IpcMainInvokeEvent): boolean {
+function fromOurWindow(event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
   const frame = event.senderFrame;
   if (!win || !frame || event.sender !== win.webContents || frame !== win.webContents.mainFrame) return false;
   if (rendererUrl) return frame.url.startsWith(rendererUrl);
@@ -311,6 +347,12 @@ function fromOurWindow(event: Electron.IpcMainInvokeEvent): boolean {
 
 function listen(core: Engine): void {
   const table = handlers(core);
+  ipcMain.on("dropwatch:sound-played", (event, played: unknown) => {
+    if (!fromOurWindow(event)) return;
+    clearTimeout(alarmTimer);
+    alarmTimer = undefined;
+    if (played !== true) shell.beep();
+  });
   ipcMain.handle(
     "dropwatch:call",
     async (event, method: unknown, args: unknown): Promise<CallResult<unknown>> => {
@@ -389,8 +431,9 @@ if (!app.requestSingleInstanceLock()) {
       notify,
       playSound,
       onState: pushState,
-      // The end-to-end test runs a pretend shop on this computer. Nothing else may be reached here.
-      ...(process.env.DROPWATCH_ALLOW_LOOPBACK === "1" && {
+      // The end-to-end test runs a pretend shop on this computer. Nothing else may be reached here,
+      // and only a run pointed at a throwaway data folder may do it.
+      ...(process.env.DROPWATCH_ALLOW_LOOPBACK === "1" && process.env.DROPWATCH_DATA_DIR && {
         fetchImpl: guardedFetch({ allowLoopback: true }),
       }),
     });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { Engine, normalizeUrl, UserError, type Notice } from "../app/main/engine.js";
+import { Engine, explainError, normalizeUrl, UserError, type Notice } from "../app/main/engine.js";
 import { clearRobotsCache } from "../src/robots.js";
 import { fakeFetch, type Route } from "./helpers.js";
 
@@ -355,6 +355,15 @@ describe("watching", () => {
   });
 });
 
+describe("explaining a refused address", () => {
+  it("says a number address is not a shop's name, and a private name is inside the network", () => {
+    for (const host of ["93.184.216.34", "93.184.216.34:8080", "[2606:4700::1111]"]) {
+      expect(explainError("private", host), host).toMatch(/only opens shops by their web name/);
+    }
+    expect(explainError("private", "router.lan")).toMatch(/inside your own network/);
+  });
+});
+
 describe("reminders and alert settings", () => {
   it("fires a reminder at its time, once", async () => {
     const h = harness();
@@ -389,6 +398,21 @@ describe("reminders and alert settings", () => {
     h.advance(31_000);
     await h.engine.pulse();
     expect(JSON.parse(readFileSync(join(dir, "dropwatch.json"), "utf8")).reminders[0].done).toBe(true);
+  });
+
+  it("writes the activity log on the next try when a write fails", () => {
+    const h = harness();
+    const saved = () => readFileSync(join(dir, "activity.json"), "utf8");
+    h.engine.setPaused(true);
+    // A folder in the way of the file the log is written through.
+    mkdirSync(join(dir, "activity.json.tmp"));
+    h.engine.flush();
+    expect(existsSync(join(dir, "activity.json"))).toBe(false);
+
+    rmSync(join(dir, "activity.json.tmp"), { recursive: true });
+    // The same call the app makes when Windows signs out.
+    h.engine.close();
+    expect(saved()).toContain("Paused watching.");
   });
 
   it("reports a reminder it was not running for instead of firing it late", async () => {

@@ -4,7 +4,7 @@ import { AlarmClock, BookOpen, History, Layers, Settings as SettingsIcon } from 
 import { call, useAppState } from "./api.js";
 import { AddProductForm, ReminderForm } from "./forms.js";
 import { Onboarding } from "./Onboarding.js";
-import { Button, Dialog, Lamp, Mark } from "./ui.js";
+import { Boundary, Button, Dialog, Lamp, Mark } from "./ui.js";
 import { Activity } from "./views/Activity.js";
 import { Guide } from "./views/Guide.js";
 import { Reminders } from "./views/Reminders.js";
@@ -103,11 +103,14 @@ export function App() {
             <Button onClick={() => void call("openExternal", state.update!.url)}>Get the update</Button>
           </div>
         )}
-        {view === "watchlist" && <Watchlist state={state} onAdd={() => setAdding(true)} onToast={showToast} />}
-        {view === "reminders" && <Reminders state={state} onAdd={() => setReminder("new")} />}
-        {view === "activity" && <Activity state={state} />}
-        {view === "guide" && <Guide />}
-        {view === "settings" && <Settings state={state} />}
+        {/* One screen failing to draw leaves the others, and the sidebar, in use. */}
+        <Boundary key={view}>
+          {view === "watchlist" && <Watchlist state={state} onAdd={() => setAdding(true)} onToast={showToast} />}
+          {view === "reminders" && <Reminders state={state} onAdd={() => setReminder("new")} />}
+          {view === "activity" && <Activity state={state} />}
+          {view === "guide" && <Guide />}
+          {view === "settings" && <Settings state={state} />}
+        </Boundary>
       </main>
 
       <Dialog open={adding} title="Add a product" onClose={() => setAdding(false)} wide>

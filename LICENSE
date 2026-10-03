@@ -1,0 +1,30 @@
+Dropwatch
+Copyright (c) 2026 kfancy. All rights reserved.
+
+This software and its source code are proprietary. They are published here so
+that people the copyright holder has personally authorized can download the
+app. Publishing them here is not a grant of any right to anyone else.
+
+Unless the copyright holder has given you permission in writing, you may not:
+
+  - install, run or otherwise use the software;
+  - copy, modify, merge, publish or distribute the software or its source
+    code, in whole or in part;
+  - sublicense or sell the software, or create works derived from it.
+
+Viewing this repository on GitHub, as GitHub's Terms of Service allow every
+visitor to do, grants none of these rights.
+
+To ask for permission, contact the copyright holder through
+https://github.com/kfancy420.
+
+Third-party components that ship with the app remain under their own
+licenses. Their license texts are installed with the app, in its "licenses"
+folder and in the license files next to the program.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

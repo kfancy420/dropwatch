@@ -1,6 +1,6 @@
 // Small building blocks every screen uses.
 
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Component, useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -173,4 +173,38 @@ export function Empty({ title, children }: { title: string; children: ReactNode 
       {children}
     </div>
   );
+}
+
+/**
+ * Catches a screen that fails to draw. Around one screen it leaves the rest of
+ * the window working; with `whole` it stands in for the window itself.
+ */
+export class Boundary extends Component<{ whole?: boolean; children: ReactNode }, { problem?: string }> {
+  override state: { problem?: string } = {};
+
+  static getDerivedStateFromError(error: unknown): { problem: string } {
+    return { problem: error instanceof Error ? error.message : String(error) };
+  }
+
+  override render(): ReactNode {
+    const { problem } = this.state;
+    if (problem === undefined) return this.props.children;
+    const { whole } = this.props;
+    const notice = (
+      <Empty title={whole ? "This window ran into a problem" : "This screen ran into a problem"}>
+        <p>Dropwatch is still watching in the background, and your alerts still go out.</p>
+        <Button variant="primary" onClick={() => this.setState({ problem: undefined })}>
+          {whole ? "Show the window again" : "Show this screen again"}
+        </Button>
+        <p className="hint">What went wrong: {problem || "unknown"}</p>
+      </Empty>
+    );
+    if (!whole) return notice;
+    return (
+      <div className="shell shell--failed">
+        <div className="titlebar" />
+        {notice}
+      </div>
+    );
+  }
 }

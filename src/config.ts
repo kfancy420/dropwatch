@@ -52,9 +52,13 @@ const RENAME_TRIES = 5;
 const RENAME_WAIT_MS = 40;
 
 export function saveConfig(path: string, config: Config): void {
-  // Write-then-rename so a crash mid-write cannot leave a half-written list.
+  writeWhole(path, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+/** Write-then-rename, so a crash mid-write cannot leave a half-written file. */
+export function writeWhole(path: string, text: string): void {
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  writeFileSync(tmp, text, "utf8");
   for (let attempt = 1; ; attempt++) {
     try {
       renameSync(tmp, path);

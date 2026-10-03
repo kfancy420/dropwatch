@@ -3,7 +3,13 @@ import type { AddressInfo, LookupFunction } from "node:net";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { guardedFetch, isPrivateAddress, PrivateAddressError, publicOnly } from "../src/guard.js";
+import {
+  guardedFetch,
+  isPrivateAddress,
+  PrivateAddressError,
+  publicOnly,
+  stoppedAsPrivate,
+} from "../src/guard.js";
 import { politeGet } from "../src/http.js";
 import { refusedHost, restrictedRetailer } from "../src/retailers.js";
 import { clearRobotsCache, getAllowed } from "../src/robots.js";
@@ -151,6 +157,7 @@ describe("the private-address guard", () => {
       "64:ff9b::7f00:1",
       "64:ff9b::192.168.1.1",
       "64:ff9b:1::1",
+      "64:ff9b:1::10.0.0.1",
       "2002:7f00:1::1",
       "2001:0:abcd::1",
     ]) {
@@ -163,6 +170,9 @@ describe("the private-address guard", () => {
       "2606:4700::1111",
       "::ffff:8.8.8.8",
       "64:ff9b::8.8.8.8",
+      "64:ff9b:1::8.8.8.8",
+      // Some VPN and proxy tools answer every name with an address in this test range.
+      "198.18.0.5",
     ]) {
       expect(isPrivateAddress(address), address).toBe(false);
     }
@@ -180,6 +190,27 @@ describe("the private-address guard", () => {
       expect(outcome(resolver("::ffff:127.0.0.1"), all)).toBeInstanceOf(PrivateAddressError);
     }
     expect(outcome(resolver("93.184.216.34", "10.0.0.5"), true)).toBeInstanceOf(PrivateAddressError);
+  });
+
+  it("treats this computer's own public addresses, and the home network around them, as private", () => {
+    const interfaces = (() => ({
+      "Wi-Fi": [
+        { address: "73.20.30.40", family: "IPv4", internal: false },
+        { address: "2601:abc:def:1:9c2e:11ff:fe22:4f2a", family: "IPv6", internal: false },
+      ],
+    })) as unknown as typeof import("node:os").networkInterfaces;
+    const outcome = (address: string) => {
+      let error: Error | null = new Error("never answered");
+      publicOnly(resolver(address), interfaces)("shop.test", { all: true }, (err) => void (error = err));
+      return error;
+    };
+    // The router usually sits at the first address of the home network.
+    expect(outcome("2601:abc:def:1::1")).toBeInstanceOf(PrivateAddressError);
+    expect(outcome("2601:abc:def:1:9c2e:11ff:fe22:4f2a")).toBeInstanceOf(PrivateAddressError);
+    expect(outcome("73.20.30.40")).toBeInstanceOf(PrivateAddressError);
+    expect(outcome("::ffff:73.20.30.40")).toBeInstanceOf(PrivateAddressError);
+    expect(outcome("2601:abc:def:2::1")).toBeNull();
+    expect(outcome("73.20.30.41")).toBeNull();
   });
 
   it("refuses a public-looking name that leads to this computer", async () => {
@@ -205,9 +236,19 @@ describe("the private-address guard", () => {
     ]) {
       await expect(politeGet(url), url).rejects.toMatchObject({ kind: "private" });
       // Asked directly, with nothing in front of it to check the address first.
-      await expect(guardedFetch()(url), url).rejects.toThrow();
+      const err = await guardedFetch()(url).then(() => undefined, (e: unknown) => e);
+      expect(stoppedAsPrivate(err), url).toBe(true);
     }
     expect(hits).toBe(0);
+  });
+
+  it("refuses every address written as numbers, public ones too", async () => {
+    // Shops go by name. The numbers could be this home's own address on the internet.
+    for (const url of ["http://93.184.216.34/", "https://93.184.216.34/item", "http://[2606:4700::1111]/"]) {
+      await expect(politeGet(url), url).rejects.toMatchObject({ kind: "private" });
+      const err = await guardedFetch()(url).then(() => undefined, (e: unknown) => e);
+      expect(stoppedAsPrivate(err), url).toBe(true);
+    }
   });
 
   it("lets the app's own tests reach a pretend shop on this computer, and nothing else private", async () => {

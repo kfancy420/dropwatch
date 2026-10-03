@@ -4,15 +4,25 @@ Dropwatch tells you the minute a trading-card product is back in stock, so you c
 
 It never buys anything for you, and it does not pretend to be a person. See [What it will not do](#what-it-will-not-do).
 
-## Download
+![The watchlist, with one product back in stock](.github/screenshots/watchlist.png)
 
-**[Download Dropwatch for Windows](https://github.com/kfancy420/dropwatch/releases/latest)** (Windows 10 or 11, 64-bit). On the release page, pick the file named `Dropwatch-Setup-…exe`.
+## Download and install
 
-1. Run the file you downloaded. Dropwatch installs for your user account only, with no administrator prompt, and adds a shortcut to the desktop and the Start menu.
-2. Windows may show a blue "Windows protected your PC" box, because the installer is not signed with a paid certificate. Click **More info**, then **Run anyway**.
-3. Open Dropwatch. It walks you through three steps: how you want to be alerted, phone alerts, and your first product.
+**[Download Dropwatch for Windows](https://github.com/kfancy420/dropwatch/releases/latest/download/Dropwatch-Setup.exe)**
+
+That link downloads one file, `Dropwatch-Setup.exe`, about 100 MB. It works on Windows 10 and Windows 11.
+
+1. Click the download link above and wait for the download to finish. If your browser warns that the file "isn't commonly downloaded", choose **Keep**. In Microsoft Edge that is the three dots next to the file, then **Keep**, then **Show more**, then **Keep anyway**.
+2. Open `Dropwatch-Setup.exe`. It is in your Downloads folder.
+3. Windows shows a blue box that says "Windows protected your PC". Click **More info**, then **Run anyway**. The box appears because the installer is not signed with a paid certificate.
+4. Wait a few seconds. Dropwatch installs and opens by itself. It never asks for an administrator password, and it puts a shortcut on your desktop and in the Start menu.
+5. Follow the three steps on screen: how you want to be alerted, alerts on your phone, and your first product.
+
+To update later, download and open the file again. Your watchlist and settings stay as they are. Dropwatch tells you in its window when a newer version is out.
 
 There is no Mac version yet.
+
+<img src=".github/screenshots/setup.png" alt="Setup: choosing how Dropwatch alerts you" width="49%"> <img src=".github/screenshots/activity-dark.png" alt="The activity log, in the dark theme" width="49%">
 
 ## How to use it
 
@@ -72,6 +82,10 @@ Phone alerts travel through the public ntfy.sh service. Anyone who knows your ch
 
 Uninstalling from Windows Settings removes the app and leaves that folder in place. Delete it by hand to remove your watchlist too.
 
+## License
+
+Dropwatch is not open source. Copyright (c) 2026 kfancy, all rights reserved. You may use, copy or share it only with the copyright holder's permission. See [LICENSE](LICENSE).
+
 ## For developers
 
 Needs Node 20.18.1 or newer and pnpm.
@@ -83,6 +97,8 @@ pnpm typecheck
 pnpm app:dev       # run the app with hot reload
 pnpm app:build     # build into out/
 pnpm e2e           # drive the built app end to end against a local pretend shop
+pnpm e2e:recovery  # a screen that fails to draw, a crashed window, signing out of Windows
+pnpm screenshots   # retake the pictures in this README
 pnpm app:dist      # build the Windows installer into release/
 ```
 

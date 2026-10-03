@@ -101,7 +101,7 @@ async function getOnce(
     });
   } catch (err) {
     if (stoppedAsPrivate(err)) {
-      throw new SourceError("private", `${hostOf(url)} leads to a private address`);
+      throw new SourceError("private", `${hostOf(url)} is not a public web address`);
     }
     throw new SourceError(
       "network",
