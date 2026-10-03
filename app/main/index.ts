@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import iconPath from "../../build/icon.png?asset";
 import trayIconPath from "../../build/tray.png?asset";
+import { guardedFetch } from "../../src/guard.js";
 import { USER_AGENT } from "../../src/http.js";
 import type { AppState, CallResult, MethodName, Methods } from "../shared/types.js";
 import { Engine, UserError, type Notice } from "./engine.js";
@@ -388,6 +389,10 @@ if (!app.requestSingleInstanceLock()) {
       notify,
       playSound,
       onState: pushState,
+      // The end-to-end test runs a pretend shop on this computer. Nothing else may be reached here.
+      ...(process.env.DROPWATCH_ALLOW_LOOPBACK === "1" && {
+        fetchImpl: guardedFetch({ allowLoopback: true }),
+      }),
     });
     listen(engine);
     createWindow();

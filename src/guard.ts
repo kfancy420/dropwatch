@@ -1,14 +1,16 @@
 // Keeps dropwatch on the public web.
 //
-// A shop's address, or one it redirects to, must not lead to this computer or
-// the home network. An address written as numbers is checked as written. A
-// name is checked when it is looked up, at the moment of connecting, so a name
-// that points somewhere private is refused whenever it starts doing so.
+// No address may lead to this computer or the home network, whether a person
+// typed it in or a shop redirected to it. The check sits where the connection
+// is opened, so nothing reaches the network without passing it. An address
+// written as numbers is checked as written. A name is checked when it is
+// looked up, so a name that points somewhere private is refused whenever it
+// starts doing so.
 
 import { lookup as dnsLookup } from "node:dns";
 import { BlockList, isIP, type LookupFunction } from "node:net";
 
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 
 import { bareHost } from "./retailers.js";
 import type { FetchLike } from "./types.js";
@@ -28,12 +30,21 @@ for (const [network, bits] of [
   ["224.0.0.0", 3],
 ] as const) {
   PRIVATE.addSubnet(network, bits, "ipv4");
+  // The same range as seen through an IPv6-only network's NAT64 gateway.
+  PRIVATE.addSubnet(`64:ff9b::${network}`, 96 + bits, "ipv6");
 }
 for (const [network, bits] of [
   // Unspecified, loopback and the retired "IPv4-compatible" range.
   ["::", 96],
+  ["64:ff9b:1::", 48],
+  ["100::", 64],
+  // Teredo and 6to4 tunnels, which can carry a private IPv4 address inside.
+  ["2001::", 32],
+  ["2002::", 16],
+  ["2001:db8::", 32],
   ["fc00::", 7],
   ["fe80::", 10],
+  ["fec0::", 10],
   ["ff00::", 8],
 ] as const) {
   PRIVATE.addSubnet(network, bits, "ipv6");
@@ -48,11 +59,18 @@ export function isPrivateAddress(address: string): boolean {
   return PRIVATE.check(bare, family === 6 ? "ipv6" : "ipv4");
 }
 
+const unbracketed = (hostname: string) => bareHost(hostname).replace(/^\[|\]$/g, "");
+
 /** True for a host that names this computer or the home network. */
 export function isLocalHost(hostname: string): boolean {
-  const host = bareHost(hostname).replace(/^\[|\]$/g, "");
+  const host = unbracketed(hostname);
   if (isIP(host)) return isPrivateAddress(host);
   return host === "localhost" || /\.(localhost|local|internal|lan|home)$/.test(host);
+}
+
+function isLoopback(hostname: string): boolean {
+  const host = unbracketed(hostname);
+  return host === "localhost" || host === "::1" || /^127\.\d+\.\d+\.\d+$/.test(host);
 }
 
 export class PrivateAddressError extends Error {
@@ -74,37 +92,39 @@ export function publicOnly(resolve: LookupFunction = dnsLookup as LookupFunction
   };
 }
 
-/**
- * A fetch that connects to private addresses only when the address itself
- * says so (localhost, 192.168.1.20), which a person has to type in on purpose.
- */
-export function guardedFetch(resolve?: LookupFunction): FetchLike {
-  const anywhere = new Agent();
-  const publicWeb = new Agent({ connect: { lookup: publicOnly(resolve) } });
-  return ((url, init) =>
-    undiciFetch(url, {
-      ...init,
-      dispatcher: isLocalHost(hostnameOf(url)) ? anywhere : publicWeb,
-    })) as FetchLike;
+export interface GuardOptions {
+  /** Stands in for DNS in tests. */
+  resolve?: LookupFunction;
+  /** Lets the app's own tests reach a pretend shop on this computer (127.0.0.1, localhost). */
+  allowLoopback?: boolean;
+}
+
+/** A fetch that only ever connects to the public web. */
+export function guardedFetch(options: GuardOptions = {}): FetchLike {
+  const checked = buildConnector({ lookup: publicOnly(options.resolve) });
+  const unchecked = buildConnector({});
+  const dispatcher = new Agent({
+    // Every connection is opened here, whatever led to it.
+    connect: (target, callback) => {
+      if (options.allowLoopback && isLoopback(target.hostname)) return unchecked(target, callback);
+      if (isLocalHost(target.hostname)) {
+        return callback(new PrivateAddressError(`${target.hostname} is a private address`), null);
+      }
+      checked(target, callback);
+    },
+  });
+  return ((url, init) => undiciFetch(url, { ...init, dispatcher })) as FetchLike;
 }
 
 let shared: FetchLike | undefined;
 
 export const safeFetch: FetchLike = (url, init) => (shared ??= guardedFetch())(url, init);
 
-/** True when a failed fetch was stopped by publicOnly. */
+/** True when a failed fetch was stopped by the guard. */
 export function stoppedAsPrivate(err: unknown): boolean {
   for (let depth = 0; err instanceof Error && depth < 5; depth++) {
     if (err instanceof PrivateAddressError) return true;
     err = err.cause;
   }
   return false;
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return "";
-  }
 }

@@ -71,6 +71,8 @@ function expect(condition, message) {
 const env = {
   ...process.env,
   DROPWATCH_DATA_DIR: dataDir,
+  // The pretend shop below lives on this computer, which the app otherwise refuses to contact.
+  DROPWATCH_ALLOW_LOOPBACK: "1",
   DROPWATCH_WINDOW_POS: process.env.DROPWATCH_WINDOW_POS ?? "4040,100",
 };
 delete env.ELECTRON_RUN_AS_NODE;

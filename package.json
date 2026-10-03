@@ -1,7 +1,7 @@
 {
   "name": "dropwatch",
   "productName": "Dropwatch",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Restock alerts for trading-card drops. Watches product pages politely, alerts a person, never buys.",
   "author": "kfancy",
   "homepage": "https://github.com/kfancy420/dropwatch",

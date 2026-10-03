@@ -147,10 +147,23 @@ describe("the private-address guard", () => {
       "fe80::1",
       "fe80::1%eth0",
       "febf::1",
+      "fec0::1",
+      "64:ff9b::7f00:1",
+      "64:ff9b::192.168.1.1",
+      "64:ff9b:1::1",
+      "2002:7f00:1::1",
+      "2001:0:abcd::1",
     ]) {
       expect(isPrivateAddress(address), address).toBe(true);
     }
-    for (const address of ["8.8.8.8", "172.32.0.1", "192.167.1.1", "2606:4700::1111", "::ffff:8.8.8.8"]) {
+    for (const address of [
+      "8.8.8.8",
+      "172.32.0.1",
+      "192.167.1.1",
+      "2606:4700::1111",
+      "::ffff:8.8.8.8",
+      "64:ff9b::8.8.8.8",
+    ]) {
       expect(isPrivateAddress(address), address).toBe(false);
     }
   });
@@ -174,16 +187,38 @@ describe("the private-address guard", () => {
     for (const scheme of ["http", "https"]) {
       const lookup = resolver("127.0.0.1");
       await expect(
-        politeGet(`${scheme}://shop.test:${port}/item`, guardedFetch(lookup)),
+        politeGet(`${scheme}://shop.test:${port}/item`, guardedFetch({ resolve: lookup })),
       ).rejects.toMatchObject({ kind: "private" });
       expect(lookup.names).toContain("shop.test");
     }
     expect(hits).toBe(0);
   });
 
-  it("still reads a local address the person typed in themselves", async () => {
+  it("refuses a private address even when it is typed in as one", async () => {
     hits = 0;
-    expect(await politeGet(`http://127.0.0.1:${port}/item`)).toBe("local page");
+    for (const url of [
+      `http://127.0.0.1:${port}/item`,
+      `http://localhost:${port}/item`,
+      `http://[::ffff:127.0.0.1]:${port}/item`,
+      "http://192.168.1.1/",
+      "http://router.lan/",
+    ]) {
+      await expect(politeGet(url), url).rejects.toMatchObject({ kind: "private" });
+      // Asked directly, with nothing in front of it to check the address first.
+      await expect(guardedFetch()(url), url).rejects.toThrow();
+    }
+    expect(hits).toBe(0);
+  });
+
+  it("lets the app's own tests reach a pretend shop on this computer, and nothing else private", async () => {
+    hits = 0;
+    const lookup = resolver("127.0.0.1");
+    const testFetch = guardedFetch({ allowLoopback: true, resolve: lookup });
+    expect(await politeGet(`http://127.0.0.1:${port}/item`, testFetch)).toBe("local page");
+    expect(hits).toBe(1);
+    for (const url of ["http://192.168.1.1/", "http://router.lan/", `http://shop.test:${port}/item`]) {
+      await expect(politeGet(url, testFetch), url).rejects.toMatchObject({ kind: "private" });
+    }
     expect(hits).toBe(1);
   });
 });
