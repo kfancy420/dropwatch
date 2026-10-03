@@ -4,7 +4,8 @@
 // browser. When a site answers with a block or a rate limit we report it and
 // back off; we do not try to get around it.
 
-import { bareHost, refusedHost } from "./retailers.js";
+import { isLocalHost, safeFetch, stoppedAsPrivate } from "./guard.js";
+import { refusedHost } from "./retailers.js";
 import type { FetchLike } from "./types.js";
 
 export const USER_AGENT =
@@ -16,6 +17,7 @@ export const SOURCE_ERROR_KINDS = [
   "not_found",
   "robots",
   "restricted",
+  "private",
   "network",
   "bad_response",
   "config",
@@ -57,7 +59,7 @@ type Response = Awaited<ReturnType<FetchLike>>;
  */
 export async function politeGet(
   url: string,
-  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+  fetchImpl: FetchLike = safeFetch,
   options: GetOptions = {},
 ): Promise<string> {
   const signal = AbortSignal.timeout(TIMEOUT_MS);
@@ -98,6 +100,9 @@ async function getOnce(
       redirect: "manual",
     });
   } catch (err) {
+    if (stoppedAsPrivate(err)) {
+      throw new SourceError("private", `${hostOf(url)} leads to a private address`);
+    }
     throw new SourceError(
       "network",
       `could not reach ${hostOf(url)}: ${err instanceof Error ? err.message : String(err)}`,
@@ -146,7 +151,7 @@ function redirectTarget(from: string, location: string): string {
   }
   // A shop on the internet has no business sending us to this computer or the home network.
   if (isLocalHost(next.hostname) && !isLocalHost(hostnameOf(from))) {
-    throw new SourceError("bad_response", `${hostOf(from)} redirects to a private address`);
+    throw new SourceError("private", `${hostOf(from)} redirects to a private address`);
   }
   next.hash = "";
   return next.href;
@@ -212,20 +217,6 @@ function retryAfterSeconds(header: string | null): number | undefined {
   if (Number.isNaN(at)) return undefined;
   const wait = Math.ceil((at - Date.now()) / 1000);
   return wait > 0 ? wait : undefined;
-}
-
-function isLocalHost(hostname: string): boolean {
-  const host = bareHost(hostname).replace(/^\[|\]$/g, "");
-  if (host.includes(":")) return host === "::1" || /^(fc|fd|fe80)/.test(host);
-  return (
-    host === "localhost" ||
-    host === "0.0.0.0" ||
-    /\.(localhost|local|internal|lan|home)$/.test(host) ||
-    /^(127|10)\.\d+\.\d+\.\d+$/.test(host) ||
-    /^192\.168\.\d+\.\d+$/.test(host) ||
-    /^169\.254\.\d+\.\d+$/.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host)
-  );
 }
 
 function hostnameOf(url: string): string {

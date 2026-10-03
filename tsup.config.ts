@@ -9,6 +9,6 @@ export default defineConfig({
   sourcemap: true,
   dts: false,
   banner: { js: "#!/usr/bin/env node" },
-  // cli-table3 ships CJS with `export =`; can't be inlined into the ESM bundle.
-  external: ["cli-table3"],
+  // These ship CJS, which can't be inlined into the ESM bundle; they load from node_modules.
+  external: ["cli-table3", "commander", "undici"],
 });

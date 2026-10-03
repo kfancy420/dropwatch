@@ -120,6 +120,8 @@ export function explainError(kind: SourceErrorKind, host: string, source?: Sourc
       return `${host} sent back something Dropwatch couldn't read.`;
     case "restricted":
       return "This link leads to a store that doesn't allow automated checks, so Dropwatch won't watch it. Set a reminder for the drop instead.";
+    case "private":
+      return `${host} leads to an address inside your own network, so Dropwatch won't open it. On public Wi-Fi, sign in to the network first.`;
     case "config":
       return source === "bestbuy"
         ? "Best Buy needs a key before Dropwatch can check it. Add one in Settings."

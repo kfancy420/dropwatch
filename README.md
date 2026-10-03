@@ -74,7 +74,7 @@ Uninstalling from Windows Settings removes the app and leaves that folder in pla
 
 ## For developers
 
-Needs Node 20 or newer and pnpm.
+Needs Node 20.18.1 or newer and pnpm.
 
 ```
 pnpm install
